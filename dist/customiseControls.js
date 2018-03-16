@@ -6,10 +6,10 @@
  */
 
 'use strict';
-(function(window) {
-    var fabric = window.fabric || ( window.fabric = {} ),
+(function (window) {
+    var fabric = window.fabric || (window.fabric = {}),
         minExtCompat = '1.6.0',
-        isVML = function() {
+        isVML = function () {
             return typeof G_vmlCanvasManager !== 'undefined';
         },
         degreesToRadians = fabric.util.degreesToRadians,
@@ -22,6 +22,9 @@
             bl: 5, // sw
             ml: 6, // w
             tl: 7, // nw
+            mm: 8,
+            del: 9,
+
         };
 
     if (minExtCompat.localeCompare(window.fabric.version) > -1) {
@@ -71,7 +74,7 @@
          * @param callback function
          */
 
-        customiseCornerIcons: function(obj, callback) {
+        customiseCornerIcons: function (obj, callback) {
             var setting,
                 cornerConfig;
 
@@ -110,8 +113,8 @@
                         if (obj[setting].icon !== undefined) {
                             cornerConfig.icon = obj[setting].icon;
 
-                            this.loadIcon(setting, cornerConfig, function() {
-                                if (callback && typeof( callback ) === 'function') {
+                            this.loadIcon(setting, cornerConfig, function () {
+                                if (callback && typeof (callback) === 'function') {
                                     callback();
                                 }
                             });
@@ -121,6 +124,78 @@
             }
         },
 
+        _getControlsVisibility: function () {
+            if (!this._controlsVisibility) {
+                this._controlsVisibility = {
+                    tl: true,
+                    tr: true,
+                    br: true,
+                    bl: true,
+                    ml: true,
+                    mt: true,
+                    mr: true,
+                    mb: true,
+                    mtr: true,
+                    mm: true,
+                    del: true
+                };
+            }
+            return this._controlsVisibility;
+        },
+
+        calcCoords: function (absolute) {
+            var theta = degreesToRadians(this.angle),
+                vpt = this.getViewportTransform(),
+                dim = absolute ? this._getTransformedDimensions() : this._calculateCurrentDimensions(),
+                currentWidth = dim.x, currentHeight = dim.y,
+                sinTh = Math.sin(theta),
+                cosTh = Math.cos(theta),
+                _angle = currentWidth > 0 ? Math.atan(currentHeight / currentWidth) : 0,
+                _hypotenuse = (currentWidth / Math.cos(_angle)) / 2,
+                offsetX = Math.cos(_angle + theta) * _hypotenuse,
+                offsetY = Math.sin(_angle + theta) * _hypotenuse,
+                center = this.getCenterPoint(),
+                // offset added for rotate and scale actions
+                coords = absolute ? center : fabric.util.transformPoint(center, vpt),
+                tl = new fabric.Point(coords.x - offsetX, coords.y - offsetY),
+                tr = new fabric.Point(tl.x + (currentWidth * cosTh), tl.y + (currentWidth * sinTh)),
+                bl = new fabric.Point(tl.x - (currentHeight * sinTh), tl.y + (currentHeight * cosTh)),
+                br = new fabric.Point(coords.x + offsetX, coords.y + offsetY),
+
+                mm = new fabric.Point(center.x, center.y),
+
+                delOffsetX = 94 * this.scaleX,
+                delOffsetY = 103 * this.scaleY,
+                del = new fabric.Point(tl.x + ((currentWidth + delOffsetX) * cosTh) + (-delOffsetY * sinTh), tl.y + ((currentWidth + delOffsetX) * sinTh) + (delOffsetY * cosTh));
+
+            if (!absolute) {
+                var ml = new fabric.Point((tl.x + bl.x) / 2, (tl.y + bl.y) / 2),
+                    mt = new fabric.Point((tr.x + tl.x) / 2, (tr.y + tl.y) / 2),
+                    mr = new fabric.Point((br.x + tr.x) / 2, (br.y + tr.y) / 2),
+                    mb = new fabric.Point((br.x + bl.x) / 2, (br.y + bl.y) / 2),
+                    mtr = new fabric.Point(mt.x + sinTh * this.rotatingPointOffset, mt.y - cosTh * this.rotatingPointOffset);
+            }
+
+
+            var coords = {
+                // corners
+                tl: tl, tr: tr, br: br, bl: bl
+            };
+            if (!absolute) {
+                // middle
+                coords.ml = ml;
+                coords.mt = mt;
+                coords.mr = mr;
+                coords.mb = mb;
+                // rotating point
+                coords.mtr = mtr;
+                coords.mm = mm;
+                coords.del = del;
+            }
+            return coords;
+        },
+
+
         /**
          * loads the icon image as an image src.
          * @param {Object} corner to load an icon.
@@ -128,23 +203,23 @@
          * @param callback function.
          */
 
-        loadIcon: function(corner, cornerConfig, callback) {
+        loadIcon: function (corner, cornerConfig, callback) {
             var self = this,
                 icon = new Image();
 
-            icon.onload = function() {
+            icon.onload = function () {
                 self[corner + 'Icon'] = this;
 
                 if (cornerConfig.settings) {
                     self[corner + 'Settings'] = cornerConfig.settings;
                 }
 
-                if (callback && typeof( callback ) === 'function') {
+                if (callback && typeof (callback) === 'function') {
                     callback();
                 }
             };
 
-            icon.onerror = function() {
+            icon.onerror = function () {
                 fabric.warn(this.src + ' icon is not an image');
             };
 
@@ -160,7 +235,7 @@
          * @param {Object} obj containing corner icon urls and settings.
          */
 
-        customizeCornerIcons: function(obj) {
+        customizeCornerIcons: function (obj) {
             this.customiseCornerIcons(obj);
         },
 
@@ -173,7 +248,7 @@
          * @chainable
          */
 
-        drawControls: function(ctx) {
+        drawControls: function (ctx) {
 
             if (!this.hasControls) {
                 return this;
@@ -281,6 +356,23 @@
                 );
             }
 
+
+            //Extra
+            this._drawControl('mm', ctx, methodName,
+                left + width / 2,
+                top + height / 2,
+                this.mtIcon,
+                this.mtSettings
+            );
+
+            this._drawControl('del', ctx, methodName,
+                width / 2 + 10,
+                top / 2 - 10,
+                this.mtIcon,
+                this.mtSettings
+            );
+
+
             ctx.restore();
 
             return this;
@@ -291,7 +383,8 @@
          * {string} icon url of the control
          */
 
-        _drawControl: function(control, ctx, methodName, left, top, icon, settings) {
+        _drawControl: function (control, ctx, methodName, left, top, icon, settings) {
+
             if (!this.isControlVisible(control)) {
                 return;
             }
@@ -321,6 +414,7 @@
                     ctx.fillStyle = cornerBG;
                     ctx.lineWidth = 1;
                     ctx.strokeStyle = cornerStroke;
+                    ctx.strokeWidth = 10;
                     switch (cornerShape) {
                         case 'rect':
                             ctx.fillRect(left, top, size, size);
@@ -397,7 +491,7 @@
          * @param {Object} obj containing corner action and cursor url/type.
          */
 
-        customiseControls: function(obj) {
+        customiseControls: function (obj) {
             var setting;
 
             for (setting in obj) {
@@ -421,7 +515,7 @@
          * @param action as a string.
          */
 
-        setCustomAction: function(corner, action) {
+        setCustomAction: function (corner, action) {
             this[corner + 'Action'] = action;
         },
 
@@ -431,7 +525,7 @@
          * @param cursorUrl as a string.
          */
 
-        setCustomCursor: function(corner, cursorUrl) {
+        setCustomCursor: function (corner, cursorUrl) {
             this[corner + 'cursorIcon'] = cursorUrl;
         },
 
@@ -440,7 +534,7 @@
          * @param {Object} obj containing corner action and cursor url/type.
          */
 
-        customizeControls: function(obj) {
+        customizeControls: function (obj) {
             this.customiseControls(obj);
         },
 
@@ -448,7 +542,7 @@
          * @private
          */
 
-        _getActionFromCorner: function(target, corner, e) {
+        _getActionFromCorner: function (target, corner, e) {
             if (!corner) {
                 return 'drag';
             }
@@ -457,7 +551,9 @@
                 if (this[corner + 'Action'] && this.overwriteActions) {
                     switch (corner) {
                         case 'mtr':
-                            return this[corner + 'Action'] || 'rotate';
+                        case 'mm':
+                        case 'del':
+                            return this[corner + 'Action'] || 'remove';
                         case 'ml':
                         case 'mr':
                             if (e[this.altActionKey]) {
@@ -476,7 +572,10 @@
                 } else {
                     switch (corner) {
                         case 'mtr':
+                        case 'mm':
                             return 'rotate';
+                        case 'del':
+                            return 'remove';
                         case 'ml':
                         case 'mr':
                             return e[this.altActionKey] ? 'skewY' : 'scaleX';
@@ -497,7 +596,7 @@
          * @param {Event} e Event object
          * @param {fabric.Object} target
          */
-        _setupCurrentTransform: function(e, target) {
+        _setupCurrentTransform: function (e, target) {
             if (!target) {
                 return;
             }
@@ -579,17 +678,17 @@
          * @param {fabric.Object} target
          */
 
-        _removeAction: function(e, target) {
+        _removeAction: function (e, target) {
             var _this = this;
             if (this.getActiveGroup() && this.getActiveGroup() !== 'undefined') {
-                this.getActiveGroup().forEachObject(function(o) {
+                this.getActiveGroup().forEachObject(function (o) {
                     o.off();
                     o.remove();
                 });
                 this.discardActiveGroup();
 
                 // as of fabric 1.6.3 necessary for reasons..
-                setTimeout(function() {
+                setTimeout(function () {
                     _this.deactivateAll();
                 }, 0);
 
@@ -597,7 +696,7 @@
                 target.off();
                 target.remove();
 
-                setTimeout(function() {
+                setTimeout(function () {
                     _this.deactivateAll();
                 }, 0);
             }
@@ -610,9 +709,9 @@
          * @param {fabric.Object} target
          */
 
-        _moveLayerUpAction: function(e, target) {
+        _moveLayerUpAction: function (e, target) {
             if (this.getActiveGroup() && this.getActiveGroup() !== 'undefined') {
-                this.getActiveGroup().forEachObject(function(o) {
+                this.getActiveGroup().forEachObject(function (o) {
                     o.bringForward();
                 });
             } else {
@@ -627,9 +726,9 @@
          * @param {fabric.Object} target
          */
 
-        _moveLayerDownAction: function(e, target) {
+        _moveLayerDownAction: function (e, target) {
             if (this.getActiveGroup() && this.getActiveGroup() !== 'undefined') {
-                this.getActiveGroup().forEachObject(function(o) {
+                this.getActiveGroup().forEachObject(function (o) {
                     o.sendBackwards();
                 });
             } else {
@@ -645,11 +744,11 @@
          * @param {Integer} value of rotation
          */
 
-        _rotateByDegrees: function(e, target, value) {
+        _rotateByDegrees: function (e, target, value) {
             var angle = parseInt(target.getAngle()) + value,
                 needsOriginRestore = false;
 
-            if (( target.originX !== 'center' || target.originY !== 'center' ) && target.centeredRotation) {
+            if ((target.originX !== 'center' || target.originY !== 'center') && target.centeredRotation) {
                 this._setOriginToCenter(target);
                 needsOriginRestore = true;
             }
@@ -657,7 +756,7 @@
             angle = angle > 360 ? angle - 360 : angle;
 
             if (this.getActiveGroup() && this.getActiveGroup() !== 'undefined') {
-                this.getActiveGroup().forEachObject(function(obj) {
+                this.getActiveGroup().forEachObject(function (obj) {
                     obj
                         .setAngle(angle)
                         .setCoords();
@@ -682,7 +781,7 @@
          * {string} corner name
          * {target} event handler of the hovered corner
          */
-        _setCornerCursor: function(corner, target, e) {
+        _setCornerCursor: function (corner, target, e) {
             var iconUrlPattern = /\.(?:jpe?g|png|gif|jpg|jpeg|svg)$/;
 
             if (this.fixedCursors && this[corner + 'cursorIcon']) {
